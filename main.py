@@ -405,6 +405,10 @@ ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.show()
 
+
+
+
+#### ABAIXO ESTÃO OS TRECHOS PARA CRIAÇÃO DE GRÁFICOS
 import ast
 import math
 import numpy as np
@@ -444,13 +448,26 @@ variaveis = {
         "Hipertensão autorreferida": "Q002",
         "Artrite/reumatismo": "Q079",
         "Câncer": "Q120",
-        "Saúde autorreferida": "N001"
+        "Saúde autorreferida": "N001",
+        "Colesterol": "Q060",
+        "Dias de Saúde Mental Ruim": "N016",
+        "Dias de Saúde Física Ruim": "N011",
+        "Plano de Saúde": "I001",
+        "Tem Deficiência Intelectual?": "G001",
+        "Tem Deficiência Física?": "G006",
+        "Tem Deficiência Auditiva?": "G014",
+        "Tem Deficiência Visual?": "G021"
     },
 
     "comportamento": {
+        "Praticou esportes nos últimos 3 meses?": "P034",
         "Atividade física nos últimos 7 dias": "P035",
-        "Tabagismo": "P05402",
-        "Uso de álcool": "P028"
+        "Quantas Horas dura a Atividade?": "P03701",
+        "Quantos minutos dura a Atividade?": "P03702",
+        "Atualmente, usa Tabaco?": "P050",
+        "Já usou Tabaco?": "P051",
+        "Com que frequência costuma consumir bebida alcoólica?": "P027",
+        "Quantos dias na semana?": "P028",
     }
 }
 
@@ -565,6 +582,7 @@ NUMERICAS_CONTINUAS = {
 # 6. FUNÇÃO PARA GERAR UM GRÁFICO
 # ============================================================
 
+
 def plotar_variavel(nome, coluna, grupo, ax):
     cor = PALETA[grupo]
 
@@ -582,7 +600,7 @@ def plotar_variavel(nome, coluna, grupo, ax):
         return
 
     # --------------------------------------------------------
-    # Histogramas e boxplots para variáveis contínuas
+    # HISTOGRAMAS PARA VARIÁVEIS CONTÍNUAS
     # --------------------------------------------------------
     if nome in NUMERICAS_CONTINUAS:
 
@@ -599,8 +617,8 @@ def plotar_variavel(nome, coluna, grupo, ax):
         ax.set_ylabel("Número de pessoas")
         ax.set_xlabel(nome)
 
-        # Média e mediana como referências.
         mediana = valores.median()
+
         ax.axvline(
             mediana,
             color="#C00000",
@@ -608,24 +626,38 @@ def plotar_variavel(nome, coluna, grupo, ax):
             linewidth=1.8,
             label=f"Mediana: {mediana:.2f}"
         )
+
         ax.legend(frameon=False)
 
     # --------------------------------------------------------
-    # Barras para contagens de comorbidades/incapacidades
-    # --------------------------------------------------------
-
-    # --------------------------------------------------------
-    # Barras para variáveis categóricas
+    # BARRAS PARA VARIÁVEIS CATEGÓRICAS
     # --------------------------------------------------------
     else:
 
-        frequencias = serie.value_counts(
-            normalize=True,
-            sort=True
-        ) * 100
+        # Frequências absolutas para determinar a ordem.
+        contagens = serie.value_counts(sort=False)
+
+        # Tenta ordenar numericamente as categorias.
+        categorias_numericas = pd.to_numeric(
+            contagens.index,
+            errors="coerce"
+        )
+
+        if categorias_numericas.notna().all():
+            contagens.index = categorias_numericas
+            contagens = contagens.sort_index()
+        else:
+            # Para categorias textuais, mantém a ordem
+            # de frequência decrescente.
+            contagens = serie.value_counts(
+                sort=True
+            )
+
+        # Converte para percentuais.
+        frequencias = contagens / contagens.sum() * 100
 
         sns.barplot(
-            x=frequencias.index.astype(str),
+            x=[str(v) for v in frequencias.index],
             y=frequencias.values,
             color=cor,
             ax=ax
@@ -634,7 +666,6 @@ def plotar_variavel(nome, coluna, grupo, ax):
         ax.set_xlabel(nome)
         ax.set_ylabel("Percentual de pessoas (%)")
 
-        # Percentuais acima das barras.
         ax.bar_label(
             ax.containers[0],
             fmt="%.1f%%",
@@ -642,7 +673,6 @@ def plotar_variavel(nome, coluna, grupo, ax):
             fontsize=8
         )
 
-        # Evita sobreposição quando há muitas categorias.
         if len(frequencias) > 5:
             ax.tick_params(axis="x", rotation=45)
 
@@ -653,6 +683,7 @@ def plotar_variavel(nome, coluna, grupo, ax):
     ax.spines["right"].set_visible(False)
 
 
+
 # ============================================================
 # 7. GERAÇÃO AUTOMÁTICA DOS GRÁFICOS
 # ============================================================
@@ -660,13 +691,16 @@ def plotar_variavel(nome, coluna, grupo, ax):
 def gerar_graficos():
     resumo = []
 
+    GRAFICOS_POR_PAGINA = 4
+    N_COLUNAS = 2
+
     for grupo, dicionario in variaveis.items():
 
-        # Considera somente variáveis com código informado.
         selecionadas = {
             nome: codigo
             for nome, codigo in dicionario.items()
-            if codigo is not None and str(codigo).strip() != ""
+            if codigo is not None
+            and str(codigo).strip() != ""
         }
 
         if not selecionadas:
@@ -677,98 +711,102 @@ def gerar_graficos():
 
         nomes = list(selecionadas.keys())
 
-        # Duas colunas de gráficos por figura.
-        n_colunas = 2
-        n_linhas = math.ceil(len(nomes) / n_colunas)
+        # Divide as variáveis em páginas de até 4 gráficos.
+        for inicio in range(
+            0, len(nomes), GRAFICOS_POR_PAGINA
+        ):
 
-        fig, eixos = plt.subplots(
-            n_linhas,
-            n_colunas,
-            figsize=(14, 4.5 * n_linhas),
-            squeeze=False
-        )
+            nomes_pagina = nomes[
+                inicio:inicio + GRAFICOS_POR_PAGINA
+            ]
 
-        fig.suptitle(
-            grupo.replace("_", " ").title(),
-            fontsize=16,
-            fontweight="bold",
-            y=1.01
-        )
+            n_linhas = math.ceil(
+                len(nomes_pagina) / N_COLUNAS
+            )
 
-        for i, nome in enumerate(nomes):
-            coluna = selecionadas[nome]
-            ax = eixos.flat[i]
+            fig, eixos = plt.subplots(
+                n_linhas,
+                N_COLUNAS,
+                figsize=(14, 9),
+                squeeze=False
+            )
 
-            try:
-                plotar_variavel(nome, coluna, grupo, ax)
+            numero_pagina = (
+                inicio // GRAFICOS_POR_PAGINA
+            ) + 1
 
-                serie, minimo, maximo = preparar_variavel(coluna)
+            total_paginas = math.ceil(
+                len(nomes) / GRAFICOS_POR_PAGINA
+            )
 
-                resumo.append({
-                    "grupo": grupo,
-                    "variavel": nome,
-                    "codigo": coluna,
-                    "n_validos": len(serie),
-                    "minimo_observado": (
-                        serie.min() if len(serie) else np.nan
-                    ),
-                    "mediana": (
-                        serie.median() if len(serie) else np.nan
-                    ),
-                    "maximo_observado": (
-                        serie.max() if len(serie) else np.nan
-                    ),
-                    "minimo_esperado": minimo,
-                    "maximo_esperado": maximo
-                })
+            fig.suptitle(
+                f"{grupo.replace('_', ' ').title()} "
+                f"— Página {numero_pagina} de {total_paginas}",
+                fontsize=16,
+                fontweight="bold"
+            )
 
-            except Exception as erro:
-                ax.set_title(nome)
-                ax.text(
-                    0.5, 0.5,
-                    f"Erro ao gerar gráfico:\n{erro}",
-                    ha="center", va="center",
-                    transform=ax.transAxes,
-                    wrap=True
-                )
-                ax.set_axis_off()
+            for i, nome in enumerate(nomes_pagina):
 
-        # Oculta os eixos que sobraram.
-        for i in range(len(nomes), len(eixos.flat)):
-            eixos.flat[i].set_visible(False)
+                coluna = selecionadas[nome]
+                ax = eixos.flat[i]
 
-        plt.tight_layout()
-        plt.show()
+                try:
+                    plotar_variavel(
+                        nome, coluna, grupo, ax
+                    )
+
+                    serie, minimo, maximo = (
+                        preparar_variavel(coluna)
+                    )
+
+                    resumo.append({
+                        "grupo": grupo,
+                        "pagina": numero_pagina,
+                        "variavel": nome,
+                        "codigo": coluna,
+                        "n_validos": len(serie),
+                        "minimo_observado": (
+                            serie.min()
+                            if len(serie) else np.nan
+                        ),
+                        "mediana": (
+                            serie.median()
+                            if len(serie) else np.nan
+                        ),
+                        "maximo_observado": (
+                            serie.max()
+                            if len(serie) else np.nan
+                        ),
+                        "minimo_esperado": minimo,
+                        "maximo_esperado": maximo
+                    })
+
+                except Exception as erro:
+                    ax.set_title(nome)
+                    ax.text(
+                        0.5, 0.5,
+                        f"Erro ao gerar gráfico:\n{erro}",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                        wrap=True
+                    )
+                    ax.set_axis_off()
+
+            # Oculta os espaços não utilizados na última página.
+            for i in range(
+                len(nomes_pagina), len(eixos.flat)
+            ):
+                eixos.flat[i].set_visible(False)
+
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            plt.show()
 
     return pd.DataFrame(resumo)
 
 
-# Executa quando os códigos das variáveis forem preenchidos.
+# Executa a geração dos gráficos.
 resumo_graficos = gerar_graficos()
 
 print(resumo_graficos)
-
-
-'''
-# podemos, ainda, fazer uma análise exploratória dessas estatísticas:
-analiseestatistica = pd.DataFrame({
-    "Tipo": data2013.dtypes,
-    "Numero Nulos": data2013.isnull().sum(),
-    "Porcentagem Nulos": data2013.isnull().mean()*100,
-    "Média": data2013['mean'],
-    "Mediana": data2013['50%'],
-    "Desvio Padrão": data2013['std'],
-    "Minimo": estatistica['min'],
-    "Máximo": estatistica['max'],
-    "25%": estatistica['75%'],
-    "75%": estatistica['25%'],
-    "N° Unicos": estatistica.nunique(),
-    "IQR": estatistica['75%'] - estatistica['25%']  # IQR = 3° quartil - 1° quartil
-})
-
-
-print("Tamo aqui 9")
-
-analiseestatistica.to_csv("./py/IC/ArquivosCSV/analiseestatistica2013prealteracao.csv", index=False, sep=';')
-print(analiseestatistica)
-'''
